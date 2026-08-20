@@ -52,22 +52,49 @@ def simple_request(func_name, query, variables):
 
 def graph_commits(start_date, end_date):
     """
-    Uses GitHub's GraphQL v4 API to return my total commit count
+    Uses GitHub's GraphQL v4 API to return my total commit count for a date
+    range (max 1 year per GitHub's API limit). This mirrors the number
+    GitHub itself uses for the profile contribution graph, since it counts
+    commits contributed on any branch, not just each repo's default branch.
     """
     query_count('graph_commits')
     query = '''
     query($start_date: DateTime!, $end_date: DateTime!, $login: String!) {
         user(login: $login) {
             contributionsCollection(from: $start_date, to: $end_date) {
-                contributionCalendar {
-                    totalContributions
-                }
+                totalCommitContributions
+                restrictedContributionsCount
             }
         }
     }'''
     variables = {'start_date': start_date,'end_date': end_date, 'login': USER_NAME}
     request = simple_request(graph_commits.__name__, query, variables)
-    return int(request.json()['data']['user']['contributionsCollection']['contributionCalendar']['totalContributions'])
+    collection = request.json()['data']['user']['contributionsCollection']
+    # restrictedContributionsCount covers private-repo commits the API can't
+    # detail individually, but that this account is still entitled to count
+    # (GitHub includes these in the profile's public commit total).
+    return int(collection['totalCommitContributions']) + int(collection['restrictedContributionsCount'])
+
+
+def total_commit_contributions(acc_date):
+    """
+    Sums totalCommitContributions across the account's full lifetime by
+    querying one year at a time (contributionsCollection's date range is
+    capped at 1 year), from account creation to now.
+    """
+    start = datetime.datetime.strptime(acc_date, '%Y-%m-%dT%H:%M:%SZ')
+    end = datetime.datetime.utcnow()
+    total = 0
+    cursor = start
+    one_year = datetime.timedelta(days=365)
+    while cursor < end:
+        chunk_end = min(cursor + one_year, end)
+        total += graph_commits(
+            cursor.strftime('%Y-%m-%dT%H:%M:%SZ'),
+            chunk_end.strftime('%Y-%m-%dT%H:%M:%SZ')
+        )
+        cursor = chunk_end
+    return total
 
 
 def drop_null_nodes(edges):
@@ -451,7 +478,7 @@ if __name__ == '__main__':
     formatter('age calculation', age_time)
     total_loc, loc_time = perf_counter(loc_query, ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER'], 7)
     formatter('LOC (cached)', loc_time) if total_loc[-1] else formatter('LOC (no cache)', loc_time)
-    commit_data, commit_time = perf_counter(commit_counter, 7)
+    commit_data, commit_time = perf_counter(total_commit_contributions, acc_date)
     star_data, star_time = perf_counter(graph_repos_stars, 'stars', ['OWNER'])
     repo_data, repo_time = perf_counter(graph_repos_stars, 'repos', ['OWNER'])
     contrib_data, contrib_time = perf_counter(graph_repos_stars, 'repos', ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER'])
