@@ -70,6 +70,16 @@ def graph_commits(start_date, end_date):
     return int(request.json()['data']['user']['contributionsCollection']['contributionCalendar']['totalContributions'])
 
 
+def drop_null_nodes(edges):
+    """
+    GitHub's GraphQL API can return a null 'node' for a repository the
+    token can't fully resolve (permission edge cases, transfers, etc).
+    Filter those out once, here, so nothing downstream has to guard
+    against it individually.
+    """
+    return [edge for edge in edges if edge and edge.get('node') is not None]
+
+
 def graph_repos_stars(count_type, owner_affiliation, cursor=None, add_loc=0, del_loc=0):
     """
     Uses GitHub's GraphQL v4 API to return my total repository, star, or lines of code count.
@@ -103,7 +113,8 @@ def graph_repos_stars(count_type, owner_affiliation, cursor=None, add_loc=0, del
         if count_type == 'repos':
             return request.json()['data']['user']['repositories']['totalCount']
         elif count_type == 'stars':
-            return stars_counter(request.json()['data']['user']['repositories']['edges'])
+            edges = drop_null_nodes(request.json()['data']['user']['repositories']['edges'])
+            return stars_counter(edges)
 
 
 def recursive_loc(owner, repo_name, data, cache_comment, addition_total=0, deletion_total=0, my_commits=0, cursor=None):
@@ -208,11 +219,12 @@ def loc_query(owner_affiliation, comment_size=0, force_cache=False, cursor=None,
     }'''
     variables = {'owner_affiliation': owner_affiliation, 'login': USER_NAME, 'cursor': cursor}
     request = simple_request(loc_query.__name__, query, variables)
+    page_edges = drop_null_nodes(request.json()['data']['user']['repositories']['edges'])
     if request.json()['data']['user']['repositories']['pageInfo']['hasNextPage']:   # If repository data has another page
-        edges += request.json()['data']['user']['repositories']['edges']            # Add on to the LoC count
+        edges += page_edges            # Add on to the LoC count
         return loc_query(owner_affiliation, comment_size, force_cache, request.json()['data']['user']['repositories']['pageInfo']['endCursor'], edges)
     else:
-        return cache_builder(edges + request.json()['data']['user']['repositories']['edges'], comment_size, force_cache)
+        return cache_builder(edges + page_edges, comment_size, force_cache)
 
 
 def cache_builder(edges, comment_size, force_cache, loc_add=0, loc_del=0):
@@ -293,7 +305,14 @@ def stars_counter(data):
     Count total stars in repositories owned by me
     """
     total_stars = 0
-    for node in data: total_stars += node['node']['stargazers']['totalCount']
+    for edge in data:
+        node = edge.get('node') if edge else None
+        if node is None:
+            # GitHub's API can return a null node for a repo the token
+            # can't fully resolve (permission edge cases, transferred
+            # repos, etc). Skip it instead of crashing the whole run.
+            continue
+        total_stars += node['stargazers']['totalCount']
     return total_stars
 
 
