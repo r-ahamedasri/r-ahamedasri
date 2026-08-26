@@ -5,6 +5,7 @@ import os
 from lxml import etree
 import time
 import hashlib
+import re
 
 # Fine-grained personal access token with All Repositories access:
 # Account permissions: read:Followers, read:Starring, read:Watching
@@ -12,7 +13,36 @@ import hashlib
 # Issues and pull requests permissions not needed at the moment, but may be used in the future
 HEADERS = {'authorization': 'token '+ os.environ['ACCESS_TOKEN']}
 USER_NAME = os.environ['USER_NAME'] # 'Andrew6rant'
-QUERY_COUNT = {'user_getter': 0, 'follower_getter': 0, 'graph_repos_stars': 0, 'recursive_loc': 0, 'graph_commits': 0, 'loc_query': 0}
+QUERY_COUNT = {'user_getter': 0, 'follower_getter': 0, 'graph_repos_stars': 0, 'recursive_loc': 0, 'graph_commits': 0, 'loc_query': 0, 'get_profile_views': 0}
+
+
+def get_profile_views(user_name):
+    """
+    Fetches the current GitHub profile view count from Anton Komarev's
+    'github-profile-views-counter' badge service (komarev.com/ghpvc).
+    GitHub's own API has no profile-view endpoint, so this is the same
+    third-party counter used by the visible badge in README.md - this
+    function just re-requests that badge's SVG and reads the number back
+    out of it, rather than showing a picture of it.
+
+    Note: every request to this URL counts as a "view" server-side, same
+    as a real visitor loading it. Since this function is called once per
+    Action run (daily via cron, plus on every push), each run adds one
+    extra view on top of real profile visits. That's an inherent
+    trade-off of using a free counter service this way, not a bug.
+    """
+    query_count('get_profile_views')
+    try:
+        response = requests.get(
+            f'https://komarev.com/ghpvc/?username={user_name}',
+            timeout=10)
+        response.raise_for_status()
+        matches = re.findall(r'<(?:text|tspan)[^>]*>([\d,]+)</(?:text|tspan)>', response.text)
+        if matches:
+            return matches[-1].replace(',', '')
+    except requests.exceptions.RequestException as e:
+        print(f'Profile views fetch failed: {e}')
+    return '0'
 
 
 def daily_readme(birthday):
@@ -343,16 +373,16 @@ def stars_counter(data):
     return total_stars
 
 
-def svg_overwrite(filename, age_data, commit_data, star_data, repo_data, contrib_data, follower_data, loc_data):
+def svg_overwrite(filename, age_data, commit_data, view_data, repo_data, contrib_data, follower_data, loc_data):
     """
-    Parse SVG files and update elements with my age, commits, stars, repositories, followers, and lines written
+    Parse SVG files and update elements with my age, commits, profile views, repositories, followers, and lines written
     """
     tree = etree.parse(filename)
     root = tree.getroot()
     find_and_replace(root, 'age_data', age_data)
     justify_format(root, 'commit_data', commit_data, 31)
-    justify_format(root, 'star_data', star_data, 30)
-    justify_format(root, 'repo_data', repo_data, 16)
+    justify_format(root, 'star_data', view_data, 30)
+    justify_format(root, 'repo_data', repo_data, 15)
     justify_format(root, 'contrib_data', contrib_data)
     justify_format(root, 'follower_data', follower_data, 26)
     justify_format(root, 'loc_data', loc_data[2], 36)
@@ -479,19 +509,19 @@ if __name__ == '__main__':
     total_loc, loc_time = perf_counter(loc_query, ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER'], 7)
     formatter('LOC (cached)', loc_time) if total_loc[-1] else formatter('LOC (no cache)', loc_time)
     commit_data, commit_time = perf_counter(total_commit_contributions, acc_date)
-    star_data, star_time = perf_counter(graph_repos_stars, 'stars', ['OWNER'])
+    view_data, view_time = perf_counter(get_profile_views, USER_NAME)
     repo_data, repo_time = perf_counter(graph_repos_stars, 'repos', ['OWNER'])
     contrib_data, contrib_time = perf_counter(graph_repos_stars, 'repos', ['OWNER', 'COLLABORATOR', 'ORGANIZATION_MEMBER'])
     follower_data, follower_time = perf_counter(follower_getter, USER_NAME)
 
     for index in range(len(total_loc)-1): total_loc[index] = '{:,}'.format(total_loc[index]) # format added, deleted, and total LOC
 
-    svg_overwrite('dark_mode.svg', age_data, commit_data, star_data, repo_data, contrib_data, follower_data, total_loc[:-1])
-    svg_overwrite('light_mode.svg', age_data, commit_data, star_data, repo_data, contrib_data, follower_data, total_loc[:-1])
+    svg_overwrite('dark_mode.svg', age_data, commit_data, view_data, repo_data, contrib_data, follower_data, total_loc[:-1])
+    svg_overwrite('light_mode.svg', age_data, commit_data, view_data, repo_data, contrib_data, follower_data, total_loc[:-1])
 
     # move cursor to override 'Calculation times:' with 'Total function time:' and the total function time, then move cursor back
     print('\033[F\033[F\033[F\033[F\033[F\033[F\033[F\033[F',
-        '{:<21}'.format('Total function time:'), '{:>11}'.format('%.4f' % (user_time + age_time + loc_time + commit_time + star_time + repo_time + contrib_time)),
+        '{:<21}'.format('Total function time:'), '{:>11}'.format('%.4f' % (user_time + age_time + loc_time + commit_time + view_time + repo_time + contrib_time)),
         ' s \033[E\033[E\033[E\033[E\033[E\033[E\033[E\033[E', sep='')
 
     print('Total GitHub GraphQL API calls:', '{:>3}'.format(sum(QUERY_COUNT.values())))
