@@ -2,8 +2,7 @@ name: Update Profile README SVGs
 
 on:
   schedule:
-    # Runs every day at 03:00 UTC
-    - cron: '0 3 * * *'
+    - cron: '0 * * * *'
   workflow_dispatch:
   push:
     branches:
