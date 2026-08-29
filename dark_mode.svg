@@ -92,7 +92,7 @@ text, tspan {white-space: pre;}
 <text fill="#c9d1d9">
 <tspan x="425" y="30">info.asri@github</tspan> -———————————————————————————————————————————————————————————————————
 <tspan x="425" y="50" class="cc">. </tspan><tspan class="key">Host</tspan>:<tspan class="cc"> ................................................... </tspan><tspan class="value">Mohamed Rila Ahamed Asri</tspan>
-<tspan x="425" y="70" class="cc">. </tspan><tspan class="key">Uptime</tspan>:<tspan class="cc" id="age_data_dots"> ............................................... </tspan><tspan class="value" id="age_data">20 years, 7 months, 11 days</tspan>
+<tspan x="425" y="70" class="cc">. </tspan><tspan class="key">Uptime</tspan>:<tspan class="cc" id="age_data_dots"> ............................................... </tspan><tspan class="value" id="age_data">20 years, 7 months, 12 days</tspan>
 <tspan x="425" y="90" class="cc">. </tspan><tspan class="key">Education</tspan>:<tspan class="cc"> ........................... </tspan><tspan class="value">BSc (Hons) Computer Science and Engineering</tspan>
 <tspan x="425" y="110" class="cc">. </tspan><tspan class="key">School</tspan>:<tspan class="cc"> ................................... </tspan><tspan class="value">University of Westminster (Assoc. IIT)</tspan>
 <tspan x="425" y="130" class="cc">. </tspan><tspan class="key">Specializing</tspan>:<tspan class="cc"> ................................ </tspan><tspan class="value">AI, Machine Learning, Cybersecurity</tspan>
